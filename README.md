@@ -87,9 +87,11 @@ horizon_minutes: 60
 | `language` | Home Assistant language | `en` or `ro` |
 | `tile_url` | OpenStreetMap | HTTPS or local keyless tile URL with `{z}`, `{x}`, `{y}` |
 
+When a searched station serves metro lines, the card shows an **Estimate missing metro times** switch directly above the arrivals. Turn it on to see approximate intermediate-station times such as Academia Militară. This exploratory choice is temporary; use the card editor or saved board settings to make it the default. Searching a different station clears line filters that do not serve that station.
+
 The map initially shows the configured or watched lines. Selecting a line in the card explores that line without creating additional Home Assistant entities. Map tiles are fetched by your browser; transit feeds are fetched only by Home Assistant. No frontend libraries load from a CDN.
 
-After an upgrade, refresh open dashboards so the browser loads the updated JavaScript. UI-managed resource URLs are maintained automatically.
+After an upgrade, refresh open dashboards so the browser loads the updated JavaScript. If an older browser session shows this card twice in the card picker, perform a full browser refresh after updating; repeated resource loads now keep a single picker registration. UI-managed resource URLs are maintained automatically.
 
 ## Using arrivals in automations
 

@@ -5,12 +5,14 @@
 <script type="module">
 import "/card.js";
 const q = new URLSearchParams(location.search);
-const stop = {stop_id:"U",name:"Piața Unirii",latitude:44.426,longitude:26.103,platform:"A",routes:[{short_name:"41",agency:"STB SA",headsign:"Piața Presei"}]};
+const stop = {stop_id:"U",name:"Piața Unirii",latitude:44.426,longitude:26.103,platform:"A",routes:[{route_id:"041",type:0,short_name:"41",agency:"STB SA",headsign:"Piața Presei"}]};
+const metroStop = {stop_id:"9909R",name:"Academia militară",latitude:44.42988,longitude:26.062666,platform:"1",routes:[{route_id:"999",short_name:"M5",agency:"METROREX SA",headsign:"Eroilor"}]};
 const time = minutes => new Date(Date.now()+minutes*60000).toISOString();
 window.activeSubscriptions = 0;
 window.commands = [];
 window.handlers = {};
-window.metadata = {routes:[{route_id:"041",short_name:"41",agency:"STB SA",long_name:"Ghencea - Piața Presei"},{route_id:"M1",short_name:"M1",agency:"METROREX SA",long_name:"Dristor - Pantelimon"}],boards:[{board_id:"saved",title:"Piața Unirii",stop_id:"U",route_ids:[],estimate_missing_times:q.get("state")==="estimated"}],tracked_route_ids:["041"]};
+window.metadata = {routes:[{route_id:"041",type:0,short_name:"41",agency:"STB SA",long_name:"Ghencea - Piața Presei"},{route_id:"M1",type:1,short_name:"M1",agency:"METROREX SA",long_name:"Dristor - Pantelimon"}],boards:[{board_id:"saved",title:"Piața Unirii",stop_id:"U",route_ids:q.has("surface_filter")?["041"]:[],estimate_missing_times:q.get("state")==="estimated"}],tracked_route_ids:["041"]};
+window.metadata.routes.push({route_id:"999",type:1,short_name:"M5",agency:"METROREX SA",long_name:"Eroilor - Valea Ialomiței/Râul Doamnei"});
 window.board = {stop,generated_at:time(0),status:q.get("state")||"live",realtime_status:q.get("stale")?"stale":"fresh",alerts_status:"fresh",arrivals:[],alerts:[]};
 if (!["no_service","times_unavailable"].includes(window.board.status)) {
  window.board.arrivals = [3,8,12].map((m,i) => ({trip_id:`T${i}`,route_id:"041",route_name:"41",headsign:i===1?"Ghencea":"Piața Presei",agency:"STB SA",source:i===2?"timetable":"live",time:time(m),scheduled_time:time(m-1),predicted_time:i===2?null:time(m),observed_at:time(0),age_seconds:i===2?null:0,event_type:"arrival",color:"176D8C",stop_id:"U"}));
@@ -20,10 +22,15 @@ if (window.board.status === "estimated") {
  window.board.realtime_status = "unavailable";
  window.board.arrivals = window.board.arrivals.map(row => ({...row, source: "estimated", scheduled_time: null, predicted_time: null, observed_at: null, age_seconds: null, estimated_time: row.time}));
 }
+function boardFor(msg) {
+ if (msg.stop_id !== "9909R") return window.board;
+ const enabled = msg.estimate_missing_times && (!msg.route_ids?.length || msg.route_ids.includes("999"));
+ return {stop:metroStop, generated_at:time(0), status:enabled?"estimated":"times_unavailable",realtime_status:"unavailable",alerts_status:"unavailable", alerts:[], arrivals:enabled?[{trip_id:"MREX_TEST",route_id:"999",route_name:"M5",headsign:"Eroilor",agency:"METROREX SA",source:"estimated",time:time(8),estimated_time:time(8),scheduled_time:null,predicted_time:null,observed_at:null,age_seconds:null,event_type:"arrival",color:"F7951E",stop_id:"9909R"}]:[]};
+}
 window.hass = {
  language:q.get("lang")||"en",config:{time_zone:"Europe/Bucharest"},
- async callWS(msg){window.commands.push(msg);if(q.get("error"))throw Error("Offline");return msg.type.endsWith("get_routes")?window.metadata:[stop,{...stop,stop_id:"U2",platform:"B"}];},
- connection:{async subscribeMessage(callback,msg){window.activeSubscriptions++;window.commands.push(msg);window.handlers[msg.type]=callback;queueMicrotask(()=>callback(msg.type.endsWith("subscribe_board")?window.board:{vehicles:[{key:"1:12",label:"B 01234",route_name:"41",route_id:"041",headsign:"Piața Presei",agency:"STB SA",latitude:44.432,longitude:26.098,observed_at:time(0),stop_status:"in_transit_to",stop_name:"Piața Unirii",color:"176D8C"}]}));let active=true;return()=>{if(active){window.activeSubscriptions--;active=false;}};}}
+ async callWS(msg){window.commands.push(msg);if(q.get("error"))throw Error("Offline");return msg.type.endsWith("get_routes")?window.metadata:msg.query.toLowerCase().includes("academia")?[metroStop]:[stop,{...stop,stop_id:"U2",platform:"B"}];},
+ connection:{async subscribeMessage(callback,msg){window.activeSubscriptions++;window.commands.push(msg);window.handlers[msg.type]=callback;queueMicrotask(()=>callback(msg.type.endsWith("subscribe_board")?boardFor(msg):{vehicles:[{key:"1:12",label:"B 01234",route_name:"41",route_id:"041",headsign:"Piața Presei",agency:"STB SA",latitude:44.432,longitude:26.098,observed_at:time(0),stop_status:"in_transit_to",stop_name:"Piața Unirii",color:"176D8C"}]}));let active=true;return()=>{if(active){window.activeSubscriptions--;active=false;}};}}
 };
 window.card = document.createElement("bucharest-transport-card");
 window.card.setConfig({type:"custom:bucharest-transport-card",board_id:"saved",show_map:!q.has("no_map")});

@@ -106,3 +106,39 @@ test("editor enables estimates for a transient board", async ({page}) => {
   await page.evaluate(() => window.card.setConfig({...window.changedConfig, stop_id: "U"}));
   await expect.poll(() => page.evaluate(() => window.commands.filter(c => c.type.endsWith("subscribe_board")).at(-1).estimate_missing_times)).toBe(true);
 });
+
+test("reloading module URLs leaves one picker entry without redefining elements", async ({page}) => {
+  const errors: string[] = []; page.on("pageerror", error => errors.push(error.message));
+  await page.goto("/");
+  await page.evaluate(async () => {
+    window.customCards.push({type: "bucharest-transport-card"}, {type: "custom:bucharest-transport-card"}, {type: "other-card"});
+    await import("/card.js?duplicate=1");
+    await import("/card.js?duplicate=2");
+  });
+  expect(await page.evaluate(() => window.customCards.filter(c => c.type?.replace(/^custom:/, "") === "bucharest-transport-card").length)).toBe(1);
+  expect(await page.evaluate(() => window.customCards.some(c => c.type === "other-card"))).toBe(true);
+  await expect(page.locator(".arrival")).toHaveCount(3);
+  expect(errors).toEqual([]);
+});
+
+test("Academia search clears surface filters and offers labelled estimates in the card", async ({page}) => {
+  await page.goto("/?surface_filter=1");
+  await page.getByRole("searchbox").fill("Academia Militara");
+  await page.locator(".results button").click();
+  await expect(page.getByRole("heading", {name: "Academia militară"})).toBeVisible();
+  await expect(page.locator(".empty-state")).toContainText("Published times are unavailable");
+  await expect.poll(() => page.evaluate(() => window.commands.filter(c => c.type.endsWith("subscribe_board")).at(-1).route_ids)).toEqual([]);
+  await page.getByLabel("Estimate missing metro times", {exact:true}).check();
+  await expect(page.locator(".source.estimated")).toHaveText("Estimated");
+  await expect(page.locator(".arrival")).toContainText("M5");
+  await expect(page.locator(".arrival")).toContainText("Eroilor");
+  await expect(page.locator(".estimate-notice")).toBeVisible();
+  // Reconnect without losing the exploratory station, filters, or estimate choice.
+  await page.evaluate(() => {
+    const hass = {...window.hass, connection: {...window.hass.connection}};
+    window.card.hass = hass;
+  });
+  await expect.poll(() => page.evaluate(() => window.commands.filter(c => c.type.endsWith("subscribe_board")).at(-1).stop_id)).toBe("9909R");
+  await expect(page.getByLabel("Estimate missing metro times", {exact:true})).toBeChecked();
+  await expect(page.locator(".source.estimated")).toHaveCount(1);
+});

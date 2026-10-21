@@ -16,8 +16,8 @@ interface Config {
   horizon_minutes?: number; tile_url?: string; language?: string;
   estimate_missing_times?: boolean; direction_id?: number;
 }
-interface Route {route_id: string; short_name: string; agency: string; long_name: string}
-interface Stop {stop_id: string; name: string; platform: string; latitude: number; longitude: number; routes: {short_name: string; headsign: string; agency: string}[]}
+interface Route {type: number; route_id: string; short_name: string; agency: string; long_name: string}
+interface Stop {stop_id: string; name: string; platform: string; latitude: number; longitude: number; routes: {route_id: string; short_name: string; headsign: string; agency: string}[]}
 interface Arrival {trip_id: string; route_id: string; route_name: string; headsign: string; agency: string; source: string; time: string; scheduled_time: string | null; predicted_time: string | null; observed_at?: string; age_seconds: number | null; event_type: string; color: string; stop_id: string}
 interface Alert {id: string; header: Record<string, string>; description: Record<string, string>}
 interface Board {stop: Stop; generated_at: string; arrivals: Arrival[]; alerts: Alert[]; status: string; realtime_status: string; alerts_status: string; error?: string}
@@ -63,7 +63,7 @@ const color = (value: string) => /^[0-9a-f]{6}$/i.test(value || "") ? `#${value}
 const safeTileURL = (value: string) => {if (!value.startsWith("https://") && !value.startsWith("/")) throw new Error("Map tiles must use HTTPS or a local URL"); return value;};
 
 export class BucharestTransportCard extends LitElement {
-  static properties = {_config: {state: true}, _board: {state: true}, _results: {state: true}, _query: {state: true}, _error: {state: true}, _metadata: {state: true}, _routeIds: {state: true}, _vehicles: {state: true}, _searchDone: {state: true}, _mapError: {state: true}, _tilesError: {state: true}};
+  static properties = {_config: {state: true}, _board: {state: true}, _results: {state: true}, _query: {state: true}, _error: {state: true}, _metadata: {state: true}, _routeIds: {state: true}, _vehicles: {state: true}, _searchDone: {state: true}, _mapError: {state: true}, _tilesError: {state: true}, _estimateMissingTimes: {state: true}};
   private _hass?: Hass;
   private _config!: Config;
   private _board?: Board;
@@ -78,6 +78,7 @@ export class BucharestTransportCard extends LitElement {
   private _directionId?: number;
   private _estimateMissingTimes = false;
   private _ready = false;
+  private _selectionInitialized = false;
   private _starting = false;
   private _mapError = false;
   private _tilesError = false;
@@ -107,6 +108,7 @@ export class BucharestTransportCard extends LitElement {
     safeTileURL(config.tile_url || OSM);
     const oldTiles = this._config?.tile_url;
     this._config = {...config};
+    this._selectionInitialized = false;
     this._ready = false;
     if (oldTiles !== config.tile_url && this._map) {this._map.remove(); this._map = undefined; this._markers.clear(); this._stopMarker = undefined;}
     if (this.isConnected && this._hass) void this._start();
@@ -148,11 +150,14 @@ export class BucharestTransportCard extends LitElement {
       const data = await this._hass.callWS<Metadata>({type: "bucharest_transport/get_routes"});
       if (!this.isConnected) return;
       this._metadata = data;
-      const saved = data.boards.find(b => b.board_id === this._config.board_id);
-      this._stopId = this._config.stop_id || saved?.stop_id || this._stopId;
-      this._directionId = this._config.direction_id ?? saved?.direction_id;
-      this._estimateMissingTimes = this._config.estimate_missing_times ?? saved?.estimate_missing_times ?? false;
-      this._routeIds = this._config.route_ids || saved?.route_ids || [];
+      if (!this._selectionInitialized) {
+        const saved = data.boards.find(b => b.board_id === this._config.board_id);
+        this._stopId = this._config.stop_id || saved?.stop_id || this._stopId;
+        this._directionId = this._config.direction_id ?? saved?.direction_id;
+        this._estimateMissingTimes = this._config.estimate_missing_times ?? saved?.estimate_missing_times ?? false;
+        this._routeIds = this._config.route_ids || saved?.route_ids || [];
+        this._selectionInitialized = true;
+      }
       this._ready = true; this._error = ""; clearTimeout(this._retryTimer); this._retryTimer = undefined;
       if (this._stopId) await this._subscribeBoard();
       await this._subscribeVehicles();
@@ -200,11 +205,17 @@ export class BucharestTransportCard extends LitElement {
     this._searchSeq++; clearTimeout(this._searchTimer);
     this._stopId = stop.stop_id; this._query = ""; this._results = []; this._searchDone = false;
     this._directionId = undefined; this._board = undefined; this._fitNeeded = true;
+    const available = new Set(stop.routes.map(route => route.route_id));
+    this._routeIds = this._routeIds.filter(route => available.has(route));
+    try {await Promise.all([this._subscribeBoard(), this._subscribeVehicles()]);} catch {this._retry();}
+  }
+  private async _estimates(event: Event) {
+    this._estimateMissingTimes = (event.target as HTMLInputElement).checked;
     try {await this._subscribeBoard();} catch {this._retry();}
   }
   private async _line(event: Event) {
     const value = (event.target as HTMLSelectElement).value;
-    this._routeIds = value ? [value] : this._config.route_ids || [];
+    this._routeIds = value ? [value] : (this._config.route_ids || []).filter(route => this._board?.stop.routes.some(r => r.route_id === route));
     this._fitNeeded = true;
     try {await Promise.all([this._subscribeBoard(), this._subscribeVehicles()]);} catch {this._retry();}
   }
@@ -263,6 +274,7 @@ export class BucharestTransportCard extends LitElement {
   render() {
     if (!this._config) return nothing;
     const board = this._board;
+    const metro = board?.stop.routes.some(r => this._metadata?.routes.some(route => route.route_id === r.route_id && route.type === 1));
     const stale = board && (board.realtime_status === "stale" || Date.now() - Date.parse(board.generated_at) > 90000);
     return html`<ha-card><div class="content">
       <header><div class="eyebrow">TPBI · BUCUREȘTI–ILFOV</div><h2>${this._config.title || board?.stop.name || this.t("title")}</h2>
@@ -270,6 +282,7 @@ export class BucharestTransportCard extends LitElement {
       <label class="search-label">${this.t("search")}<input type="search" maxlength="120" .value=${this._query} placeholder=${this.t("hint")} @input=${this._search}></label>
       ${this._results.length ? html`<div class="results">${this._results.map(s => html`<button @click=${() => this._choose(s)}><strong>${s.name}</strong><small>${s.platform || s.stop_id} · ${[...new Set(s.routes.map(r => `${r.short_name} ${r.agency}`))].join(", ")}</small></button>`)}</div>` : this._searchDone ? html`<p class="message">${this.t("no_results")}</p>` : nothing}
       <label class="line-label">${this.t("lines")}<select @change=${this._line} .value=${this._routeIds.length === 1 ? this._routeIds[0] : ""}><option value="">${this.t("all")}</option>${(this._metadata?.routes || []).map(r => html`<option value=${r.route_id}>${r.short_name} · ${r.agency}</option>`)}</select></label>
+      ${metro ? html`<label class="estimate-toggle"><input type="checkbox" .checked=${this._estimateMissingTimes} @change=${this._estimates}>${this.t("estimate_field")}</label>` : nothing}
       ${this._error ? html`<p role="status" class="notice">${this._error}</p>` : !this._ready ? html`<p role="status" class="message">${this.t("loading")}</p>` : !board ? html`<p class="message">${this.t("choose")}</p>` : nothing}
       ${board && (board.realtime_status !== "fresh" || stale) ? html`<p class="notice">${this.t(stale ? "stale_notice" : "realtime_missing")}</p>` : nothing}
       ${board?.arrivals.some(row => row.source === "estimated") ? html`<p class="notice estimate-notice">${this.t("estimate_notice")}</p>` : nothing}
@@ -285,7 +298,7 @@ export class BucharestTransportCard extends LitElement {
     ha-card{display:block;overflow:hidden;background:var(--ha-card-background,var(--card-background-color,#fff));border-radius:var(--ha-card-border-radius,16px);border:1px solid var(--divider-color,#e3e9eb)}
     .content{padding:22px}header{position:relative;padding-right:75px;margin-bottom:20px}.eyebrow{font-size:10px;letter-spacing:.14em;color:var(--secondary-text-color,#637680);font-weight:700}h2{margin:8px 0 0;font-size:23px;line-height:1.2;font-weight:650}
     .status{position:absolute;right:0;top:22px;font-size:11px;padding:5px 8px;border-radius:20px;background:var(--secondary-background-color,#edf1f2)}.status.live{color:#16734c;background:#e5f4ec}
-    label{display:block;font-size:12px;font-weight:600}input,select{box-sizing:border-box;width:100%;border:1px solid var(--divider-color,#ccd7dc);border-radius:9px;padding:11px 12px;background:var(--card-background-color,#fff);color:var(--primary-text-color,#182c37);font:inherit;font-size:14px;margin-top:6px;min-height:44px}input:focus,select:focus,button:focus-visible{outline:2px solid var(--primary-color,#176d8c);outline-offset:2px}.line-label{margin:14px 0}.results{max-height:260px;overflow:auto;border:1px solid var(--divider-color,#e3e9eb);border-radius:8px;margin-top:5px}.results button{display:block;text-align:left;width:100%;border:0;border-bottom:1px solid var(--divider-color,#eee);background:var(--card-background-color,#fff);color:inherit;padding:12px;cursor:pointer}.results button:hover{background:var(--secondary-background-color,#edf3f5)}small{display:block;color:var(--secondary-text-color,#647780);font-size:11px;line-height:1.5}.message{color:var(--secondary-text-color,#647780);font-size:13px;line-height:1.5}.notice{font-size:12px;line-height:1.6;background:var(--secondary-background-color,#f0f4f6);padding:10px 12px;border-radius:8px}.arrival{display:flex;align-items:center;gap:12px;padding:14px 0;border-top:1px solid var(--divider-color,#e7ecee)}.route-pill{display:inline-flex;align-items:center;justify-content:center;min-width:36px;height:28px;border:1px solid;border-radius:6px;font-weight:750;font-size:13px;flex-shrink:0;padding:0 4px}.destination{flex:1;min-width:0}.destination strong{font-size:14px;line-height:1.4;display:block;overflow-wrap:anywhere}.source.live{color:#18764f}.when{text-align:right;white-space:nowrap}.when strong{font-size:17px}.when small{font-size:12px}.alerts{font-size:12px;line-height:1.6;border-top:1px solid var(--divider-color,#eee);padding-top:12px}.alerts summary{cursor:pointer;font-weight:650}.alerts article{padding:10px 0}.alerts p{margin:4px 0}.map-wrap{position:relative;background:#e5eceb}.map-wrap[hidden]{display:none}#map{height:300px;width:100%;z-index:0}.map-empty,.map-notice{position:absolute;z-index:500;background:var(--card-background-color,#fff);padding:7px 10px;border-radius:7px;box-shadow:0 1px 4px #0002;font-size:11px;max-width:80%;left:12px}.map-empty{bottom:28px}.map-notice{top:8px;left:50px}.vehicle-badge{display:flex;align-items:center;justify-content:center;width:42px;height:28px;border-radius:7px;color:white;font-size:12px;font-weight:750;box-shadow:0 1px 5px #0005;border:2px solid white;box-sizing:border-box}.leaflet-container{font-family:inherit}.leaflet-popup-content{font-size:12px;line-height:1.6}footer{display:flex;justify-content:space-between;gap:8px;padding:10px 20px;font-size:9px;color:var(--secondary-text-color,#647780)}footer a{color:inherit;text-decoration:none}@media(max-width:420px){.content{padding:16px}h2{font-size:20px}.arrival{gap:9px}.destination strong{font-size:13px}.when strong{font-size:15px}footer{padding:9px 16px}#map{height:260px}}
+    label{display:block;font-size:12px;font-weight:600}input,select{box-sizing:border-box;width:100%;border:1px solid var(--divider-color,#ccd7dc);border-radius:9px;padding:11px 12px;background:var(--card-background-color,#fff);color:var(--primary-text-color,#182c37);font:inherit;font-size:14px;margin-top:6px;min-height:44px}input:focus,select:focus,button:focus-visible{outline:2px solid var(--primary-color,#176d8c);outline-offset:2px}.line-label{margin:14px 0}.estimate-toggle{display:flex;align-items:center;gap:8px;margin:12px 0}.estimate-toggle input{width:18px;height:18px;min-height:0;margin:0;flex-shrink:0;accent-color:var(--primary-color,#176d8c)}.results{max-height:260px;overflow:auto;border:1px solid var(--divider-color,#e3e9eb);border-radius:8px;margin-top:5px}.results button{display:block;text-align:left;width:100%;border:0;border-bottom:1px solid var(--divider-color,#eee);background:var(--card-background-color,#fff);color:inherit;padding:12px;cursor:pointer}.results button:hover{background:var(--secondary-background-color,#edf3f5)}small{display:block;color:var(--secondary-text-color,#647780);font-size:11px;line-height:1.5}.message{color:var(--secondary-text-color,#647780);font-size:13px;line-height:1.5}.notice{font-size:12px;line-height:1.6;background:var(--secondary-background-color,#f0f4f6);padding:10px 12px;border-radius:8px}.arrival{display:flex;align-items:center;gap:12px;padding:14px 0;border-top:1px solid var(--divider-color,#e7ecee)}.route-pill{display:inline-flex;align-items:center;justify-content:center;min-width:36px;height:28px;border:1px solid;border-radius:6px;font-weight:750;font-size:13px;flex-shrink:0;padding:0 4px}.destination{flex:1;min-width:0}.destination strong{font-size:14px;line-height:1.4;display:block;overflow-wrap:anywhere}.source.live{color:#18764f}.when{text-align:right;white-space:nowrap}.when strong{font-size:17px}.when small{font-size:12px}.alerts{font-size:12px;line-height:1.6;border-top:1px solid var(--divider-color,#eee);padding-top:12px}.alerts summary{cursor:pointer;font-weight:650}.alerts article{padding:10px 0}.alerts p{margin:4px 0}.map-wrap{position:relative;background:#e5eceb}.map-wrap[hidden]{display:none}#map{height:300px;width:100%;z-index:0}.map-empty,.map-notice{position:absolute;z-index:500;background:var(--card-background-color,#fff);padding:7px 10px;border-radius:7px;box-shadow:0 1px 4px #0002;font-size:11px;max-width:80%;left:12px}.map-empty{bottom:28px}.map-notice{top:8px;left:50px}.vehicle-badge{display:flex;align-items:center;justify-content:center;width:42px;height:28px;border-radius:7px;color:white;font-size:12px;font-weight:750;box-shadow:0 1px 5px #0005;border:2px solid white;box-sizing:border-box}.leaflet-container{font-family:inherit}.leaflet-popup-content{font-size:12px;line-height:1.6}footer{display:flex;justify-content:space-between;gap:8px;padding:10px 20px;font-size:9px;color:var(--secondary-text-color,#647780)}footer a{color:inherit;text-decoration:none}@media(max-width:420px){.content{padding:16px}h2{font-size:20px}.arrival{gap:9px}.destination strong{font-size:13px}.when strong{font-size:15px}footer{padding:9px 16px}#map{height:260px}}
   `];
 }
 
@@ -312,8 +325,8 @@ export class BucharestTransportEditor extends LitElement {
     <label>${this.t("tiles")}<input .value=${this._config.tile_url || ""} placeholder=${OSM} @change=${(e: Event) => this.change("tile_url", (e.target as HTMLInputElement).value)}></label>`;}
   static styles = css`:host{display:grid;gap:12px;font-family:system-ui}label{display:grid;gap:6px;font-size:13px}input,select{font:inherit;padding:10px;border:1px solid var(--divider-color,#ccc);border-radius:8px;color:var(--primary-text-color,#222);background:var(--card-background-color,#fff)}.check{display:flex;align-items:center;gap:8px}`;
 }
-customElements.define("bucharest-transport-card", BucharestTransportCard);
-customElements.define("bucharest-transport-card-editor", BucharestTransportEditor);
-const registry = window as unknown as {customCards: object[]};
-registry.customCards = registry.customCards || [];
+if (!customElements.get("bucharest-transport-card")) customElements.define("bucharest-transport-card", BucharestTransportCard);
+if (!customElements.get("bucharest-transport-card-editor")) customElements.define("bucharest-transport-card-editor", BucharestTransportEditor);
+const registry = window as unknown as {customCards: {type?: string; [key: string]: unknown}[]};
+registry.customCards = (registry.customCards || []).filter(card => card.type?.replace(/^custom:/, "") !== "bucharest-transport-card");
 registry.customCards.push({type: "bucharest-transport-card", name: "Bucharest Public Transport", description: "TPBI station arrivals and live vehicles", preview: true});
