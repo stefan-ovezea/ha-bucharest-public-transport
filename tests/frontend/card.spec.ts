@@ -80,3 +80,29 @@ test("visual editor emits config changes and map can be hidden", async ({page}) 
   await title.fill("My commute");await title.blur();
   await expect.poll(()=>page.evaluate(()=>window.changedConfig?.title)).toBe("My commute");
 });
+
+test("metro estimates are labelled in both languages and inherit the saved board option", async ({page}) => {
+  for (const [lang, label] of [["en", "Estimated"], ["ro", "Estimat"]]) {
+    await page.goto(`/?state=estimated&lang=${lang}`);
+    await expect(page.locator(".source.estimated")).toHaveCount(3);
+    await expect(page.locator(".status")).toHaveText(label);
+    await expect(page.locator(".estimate-notice")).toBeVisible();
+    await expect.poll(() => page.evaluate(() => window.commands.filter(c => c.type.endsWith("subscribe_board")).at(-1).estimate_missing_times)).toBe(true);
+    await expect(page.locator(".source.live")).toHaveCount(0);
+  }
+});
+
+test("editor enables estimates for a transient board", async ({page}) => {
+  await page.goto("/?no_map=1");
+  await page.evaluate(async () => {
+    const editor = await window.card.constructor.getConfigElement();
+    editor.setConfig({type: "custom:bucharest-transport-card"});
+    editor.hass = window.hass;
+    editor.addEventListener("config-changed", e => window.changedConfig = e.detail.config);
+    document.querySelector("main").append(editor);
+  });
+  await page.getByLabel("Estimate missing metro times", {exact: true}).check();
+  await expect.poll(() => page.evaluate(() => window.changedConfig?.estimate_missing_times)).toBe(true);
+  await page.evaluate(() => window.card.setConfig({...window.changedConfig, stop_id: "U"}));
+  await expect.poll(() => page.evaluate(() => window.commands.filter(c => c.type.endsWith("subscribe_board")).at(-1).estimate_missing_times)).toBe(true);
+});

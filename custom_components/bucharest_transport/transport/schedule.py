@@ -11,12 +11,13 @@ import zipfile
 from collections import defaultdict
 from contextlib import contextmanager
 from datetime import date
+from itertools import groupby
 from pathlib import Path
 
 from .search import normalize
 from .time import seconds, service_dates, service_epoch
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 SCHEMA = """
 CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE agencies (agency_id TEXT PRIMARY KEY, name TEXT NOT NULL);
@@ -29,6 +30,7 @@ CREATE TABLE exceptions (service_id TEXT, day TEXT, type INTEGER, PRIMARY KEY(se
 CREATE TABLE stop_times (trip_id TEXT, stop_id TEXT, sequence INTEGER, arrival INTEGER, departure INTEGER, pickup INTEGER, headsign TEXT, PRIMARY KEY(trip_id,sequence));
 CREATE TABLE stop_routes (stop_id TEXT, route_id TEXT, direction INTEGER, headsign TEXT);
 CREATE INDEX stop_routes_stop ON stop_routes(stop_id);
+CREATE TABLE estimates (trip_id TEXT, sequence INTEGER, time INTEGER, before_sequence INTEGER, after_sequence INTEGER, PRIMARY KEY(trip_id,sequence));
 """
 
 
@@ -55,6 +57,45 @@ def _batches(connection, sql, rows):
             batch.clear()
     if batch:
         connection.executemany(sql, batch)
+
+
+def _estimate_metro_times(db):
+    """Bound missing subway calls by published anchors; never extrapolate.
+
+    Equal intervals between actual calls are an approximation, not published
+    times. Sequence numbers are identifiers and may have gaps at branch joins.
+    Keep estimates separate so raw times and realtime delay bases stay intact.
+    """
+    calls = db.execute(
+        "SELECT s.* FROM stop_times s JOIN trips t USING(trip_id) "
+        "JOIN routes r USING(route_id) WHERE r.type=1 ORDER BY s.trip_id,s.sequence"
+    )
+    for trip_id, rows in groupby(calls, key=lambda row: row[0]):
+        rows = list(rows)
+        before = None
+        for index, row in enumerate(rows):
+            # SQL column order: trip, stop, sequence, arrival, departure, pickup, headsign.
+            if row[3] is None and row[4] is None:
+                continue
+            if before is not None:
+                left = rows[before]
+                start = left[4] if left[4] is not None else left[3]
+                end = row[3] if row[3] is not None else row[4]
+                if end > start:
+                    db.executemany(
+                        "INSERT INTO estimates VALUES (?,?,?,?,?)",
+                        (
+                            (
+                                trip_id,
+                                rows[j][2],
+                                round(start + (end - start) * (j - before) / (index - before)),
+                                left[2],
+                                row[2],
+                            )
+                            for j in range(before + 1, index)
+                        ),
+                    )
+            before = index
 
 
 def import_feed(payload: bytes, destination: Path, headers: dict | None = None) -> bool:
@@ -191,6 +232,7 @@ def import_feed(payload: bytes, destination: Path, headers: dict | None = None) 
             ).fetchone()
             if not bounds[0]:
                 raise ValueError("GTFS has no service calendar")
+            _estimate_metro_times(db)
             db.execute(
                 "INSERT INTO stop_routes SELECT DISTINCT s.stop_id,t.route_id,t.direction,t.headsign FROM stop_times s JOIN trips t USING(trip_id)"
             )
@@ -356,12 +398,24 @@ class Schedule:
                     calls[(row["trip_id"], row["sequence"])] = dict(row)
         return calls
 
-    def board_rows(self, stop_id: str, now: float, horizon: int, live_trip_ids: set[str]):
+    def board_rows(
+        self,
+        stop_id: str,
+        now: float,
+        horizon: int,
+        live_trip_ids: set[str],
+        estimate_missing_times: bool = False,
+    ):
         stop_ids = self.stop_ids(stop_id)
         if not stop_ids:
             return [], [], False
         placeholder = ",".join("?" for _ in stop_ids)
-        sql = f"SELECT s.*,t.route_id,t.service_id,t.direction,t.headsign trip_headsign FROM stop_times s JOIN trips t USING(trip_id) WHERE s.stop_id IN ({placeholder})"
+        effective = (
+            "coalesce(s.arrival,s.departure,e.time)"
+            if estimate_missing_times
+            else "coalesce(s.arrival,s.departure)"
+        )
+        sql = f"SELECT s.*,t.route_id,t.service_id,t.direction,t.headsign trip_headsign,e.time estimated,e.before_sequence,e.after_sequence FROM stop_times s JOIN trips t USING(trip_id) LEFT JOIN estimates e ON s.trip_id=e.trip_id AND s.sequence=e.sequence WHERE s.stop_id IN ({placeholder})"
         scheduled = []
         with self.connect() as db:
             for day in service_dates(now, horizon, self.meta["max_seconds"]):
@@ -371,7 +425,7 @@ class Schedule:
                 epoch = service_epoch(day)
                 query = (
                     sql
-                    + f" AND t.service_id IN ({','.join('?' for _ in active)}) AND coalesce(s.arrival,s.departure) BETWEEN ? AND ?"
+                    + f" AND t.service_id IN ({','.join('?' for _ in active)}) AND {effective} BETWEEN ? AND ?"
                 )
                 for row in db.execute(
                     query, [*stop_ids, *sorted(active), now - epoch, now + horizon * 60 - epoch]
@@ -388,7 +442,7 @@ class Schedule:
                 live_rows.extend(dict(r) for r in db.execute(query, [*stop_ids, *chunk]))
             has_times = (
                 db.execute(
-                    f"SELECT 1 FROM stop_times WHERE stop_id IN ({placeholder}) AND coalesce(arrival,departure) IS NOT NULL LIMIT 1",
+                    f"SELECT 1 FROM stop_times s LEFT JOIN estimates e ON s.trip_id=e.trip_id AND s.sequence=e.sequence WHERE s.stop_id IN ({placeholder}) AND {effective} IS NOT NULL LIMIT 1",
                     stop_ids,
                 ).fetchone()
                 is not None

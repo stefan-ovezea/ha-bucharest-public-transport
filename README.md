@@ -1,5 +1,7 @@
 # Bucharest Public Transport
 
+<img src="custom_components/bucharest_transport/brand/icon.png" alt="A smiling teal bus" width="128" height="128">
+
 A Home Assistant custom integration and dashboard card for public transport in Bucharest and Ilfov. Uses TPBI's public GTFS and GTFS-Realtime feeds directly. **No account, API key, paid service, or separate server is required.**
 
 Requires **Home Assistant 2026.10 or newer**. English and Romanian are supported.
@@ -20,7 +22,7 @@ Requires **Home Assistant 2026.10 or newer**. English and Romanian are supported
 | Regio Serv Transport | Yes | Where supplied by TPBI |
 | Metrorex | Partial | Not currently supplied in the inspected feeds |
 
-**Metrorex:** many intermediate stations have no published stop times. Those stations display “Times unavailable.” The integration does not interpolate missing times or simulate train locations. Compatible live metro records will be used if TPBI publishes them. [InfoTB's FAQ](https://info.stb.ro/ro/faq) explains the absence of live metro locations.
+**Metrorex:** many intermediate stations have no published stop times. Those stations display “Times unavailable” by default. Enable **Estimate missing metro times** on a saved board or card to interpolate missing subway calls between two published times. Estimates are labelled separately and do not simulate train locations. Compatible live metro records will be used if TPBI publishes them. [InfoTB's FAQ](https://info.stb.ro/ro/faq) explains the absence of live metro locations.
 
 ## Install with HACS
 
@@ -29,11 +31,13 @@ Requires **Home Assistant 2026.10 or newer**. English and Romanian are supported
 3. Open **Settings → Devices & services → Add integration → Bucharest Public Transport**.
 4. Wait for the initial timetable import. The current regional feed contains about 1.45 million stop-time rows; allow a minute or more on slower hardware.
 
+The integration bundles its own bus icon under `brand/`, supported by Home Assistant 2026.3+. Current HACS versions may still show a placeholder because of [the local-branding display bug](https://github.com/hacs/integration/issues/5402); the maintainers report it fixed in the Marketplace integration planned for Home Assistant 2026.11.
+
 For manual installation, copy `custom_components/bucharest_transport` into your configuration's `custom_components` directory and restart.
 
 ### Save station boards
 
-On the integration, select **Add station board**. Search for a station, choose the correct platform, and optionally filter lines and direction. Each board creates:
+On the integration, select **Add station board**. Search for a station, choose the correct platform, and optionally filter lines and direction. For intermediate metro stations, optionally enable **Estimate missing metro times**. Each board creates:
 
 - A next-arrival timestamp sensor, with up to 10 upcoming calls in its attributes.
 - A service-alert problem sensor. It becomes unavailable when the alert feed is stale.
@@ -46,7 +50,7 @@ Use the integration's **Configure** options to select lines for GPS vehicle enti
 
 1. Enable Advanced Mode in your Home Assistant profile if the Resources menu is hidden.
 2. Open **Settings → Dashboards → menu → Resources → Add resource**.
-3. Set URL to `/bucharest_transport/bucharest-transport-card.js?v=0.1.0` and type to **JavaScript module**.
+3. Set URL to `/bucharest_transport/bucharest-transport-card.js?v=0.2.0` and type to **JavaScript module**.
 4. Add the **Bucharest Public Transport** card using the card picker. Use its visual editor to select a saved board or leave it open for station searches.
 
 Example:
@@ -64,6 +68,8 @@ horizon_minutes: 60
 | `board_id` | unset | A saved station board; selected in the visual editor |
 | `stop_id` | unset | A specific GTFS stop, overriding the saved board's stop |
 | `route_ids` | saved board filters, otherwise all | GTFS line IDs, as strings |
+| `estimate_missing_times` | saved board setting, otherwise `false` | Approximate missing subway calls between published anchors |
+| `direction_id` | saved board setting, otherwise both | GTFS direction `0` or `1` |
 | `show_map` | `true` | Show the vehicle map |
 | `max_arrivals` | `10` | 1–50 calls |
 | `horizon_minutes` | `60` | 1–1440 minutes ahead |
@@ -89,7 +95,43 @@ response_variable: transport
 
 Use station search to find a suitable ID. Metro stations can return no times; the example ID is not a guarantee of arrivals.
 
-The response includes `stop`, `arrivals`, `alerts`, `status`, `realtime_status`, `alerts_status`, and `timetable_valid`. Each call includes line, operator, direction, destination, stop sequence, service date, `scheduled_time`, `predicted_time`, effective `time`, `source`, freshness, and `event_type`. Times use ISO 8601 UTC. A departure-only update is explicitly labelled `departure`.
+The response includes `stop`, `arrivals`, `alerts`, `status`, `realtime_status`, `alerts_status`, and `timetable_valid`. Each call includes line, operator, direction, destination, stop sequence, service date, `scheduled_time`, `predicted_time`, effective `time`, `source`, freshness, and `event_type`. Opt-in interpolated calls have `source: estimated`, `estimated_time`, `estimate_method: stop_order_interpolation`, and `estimate_anchor_sequences`; their `scheduled_time` and `predicted_time` remain null. Times use ISO 8601 UTC. A departure-only update is explicitly labelled `departure`.
+
+### Academia Militară on M5
+
+Save a station board for **Academia militară**, platform **1**, toward **Eroilor**. Enable **Estimate missing metro times**, select M5, and choose direction **1**. This creates a next-arrival timestamp sensor that can be used in automations; its `arrivals` attributes retain the `estimated` source. The board includes trains from both western branches, not just the particular train someone boarded.
+
+To query it directly:
+
+```yaml
+action: bucharest_transport.get_arrivals
+data:
+  stop_id: "9909R"
+  route_ids: ["999"]
+  direction_id: 1
+  estimate_missing_times: true
+  horizon_minutes: 60
+response_variable: metro
+```
+
+For a dashboard card:
+
+```yaml
+type: custom:bucharest-transport-card
+stop_id: "9909R"
+route_ids: ["999"]
+direction_id: 1
+estimate_missing_times: true
+show_map: false
+```
+
+`99090` is the parent station (both platforms); `9909R` is platform 1 toward Eroilor, and `9909T` is platform 2 in the opposite direction. These IDs come from the inspected regional feed; station search remains the best way to find them if the publisher changes identifiers.
+
+The calculation distributes time **evenly by actual stop order**, between the preceding published departure and following published arrival. It ignores gaps in stop sequence numbers, respects each trip's branch, calendar and service day, and never extrapolates before the first or after the last timed call. Published stop times are kept intact. Only subway routes (`route_type=1`) are eligible. Fresh explicit predictions, cancellations and skipped stops take precedence; delay-only updates are never applied to an invented schedule base.
+
+For example, on 21 October 2026, trip `MREX_LV_999_1_2127` publishes Valea Ialomiței at 12:37, Romancierilor arrival/departure at 12:39/12:39:30, and Eroilor at 12:49:30. Five blank intermediate stops split that ten-minute interval into six legs, putting Academia Militară at **12:47:50**. This is an approximate reference for planning, not evidence that a train actually reached the station. Inter-station travel times are unequal, so allow a margin; no numerical error bound is implied. Google may use a different timetable or calculation.
+
+A timestamp sensor answers “when is the next train expected here according to the available data?” Estimating a particular person's arrival also requires knowing which train they boarded and allowing for the walk to work.
 
 Authenticated WebSocket commands are documented in [docs/API.md](docs/API.md).
 
@@ -99,11 +141,12 @@ Positions and trip updates are polled every 30 seconds; alerts every five minute
 
 - **Live:** both feed and record timestamps are at most 90 seconds old, allowing 60 seconds of future clock skew. If a record has no timestamp, its feed timestamp is used and recorded as the timestamp basis.
 - **Timetable:** a published time, without a fresh prediction. The timetable must cover the current date.
+- **Estimated:** an optional approximation for missing subway calls between published anchors. Not live; no observed timestamp or known accuracy bound.
 - **Stale:** a previously received feed has expired. Available timetable times remain labelled as timetable data.
 - **No service:** no published calls in the chosen time window.
-- **Times unavailable:** neither a usable prediction nor published timetable times are available.
+- **Times unavailable:** neither a usable prediction, published timetable time, nor enabled bounded estimate is available.
 
-The timetable is checked every six hours using HTTP cache validators and a SHA-256 checksum. It is streamed into SQLite under `.storage/bucharest_transport/`. Imports happen outside the event loop; a validated replacement atomically replaces the cache. Failed updates retain the previous valid cache. A timetable build date several weeks old is normal when its service calendar remains valid.
+The timetable is checked every six hours using HTTP cache validators and a SHA-256 checksum. It is streamed into SQLite under `.storage/bucharest_transport/`. After upgrading from the first cache format, the integration downloads and rebuilds the timetable automatically. Imports happen outside the event loop; a validated replacement atomically replaces the cache. Failed updates retain the previous valid cache. A timetable build date several weeks old is normal when its service calendar remains valid.
 
 Public feeds have no availability guarantee. A feed failure does not disable other usable feeds. Diagnostic entities and integration diagnostics expose the source status. If a saved stop disappears from a new timetable, reconfigure that board using station search.
 

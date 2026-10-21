@@ -61,6 +61,7 @@ class TransportEngine:
         direction_id=None,
         limit=10,
         horizon_minutes=60,
+        estimate_missing_times=False,
     ):
         schedule = self.schedule
         route_ids = route_ids or []
@@ -69,7 +70,7 @@ class TransportEngine:
         feed = self.feeds["tripUpdates"]
         live = [r for r in feed.records if feed.usable(r, now)]
         scheduled, live_rows, has_times = schedule.board_rows(
-            stop_id, now, horizon_minutes, {r["trip_id"] for r in live}
+            stop_id, now, horizon_minutes, {r["trip_id"] for r in live}, estimate_missing_times
         )
         valid_day = datetime.fromtimestamp(now, TZ).strftime("%Y%m%d")
         valid_schedule = schedule.meta["start_date"] <= valid_day <= schedule.meta["end_date"]
@@ -113,7 +114,11 @@ class TransportEngine:
             if update and update["relationship"] in (3, 7):  # CANCELED, DELETED
                 cancelled += 1
                 continue
-            event_type = "arrival" if row["arrival"] is not None else "departure"
+            event_type = (
+                "departure"
+                if row["arrival"] is None and row["departure"] is not None
+                else "arrival"
+            )
             scheduled_seconds = row[event_type]
             scheduled_time = epoch + scheduled_seconds if scheduled_seconds is not None else None
             predicted = None
@@ -162,8 +167,17 @@ class TransportEngine:
                                 delay = event["delay"]
                     if delay is not None:
                         predicted = scheduled_time + delay
+            estimated = (
+                epoch + row["estimated"]
+                if estimate_missing_times and row["estimated"] is not None and valid_schedule
+                else None
+            )
             effective = (
-                predicted if predicted is not None else scheduled_time if valid_schedule else None
+                predicted
+                if predicted is not None
+                else (scheduled_time if scheduled_time is not None else estimated)
+                if valid_schedule
+                else None
             )
             if effective is None or not now <= effective <= now + horizon_minutes * 60:
                 continue
@@ -184,9 +198,20 @@ class TransportEngine:
                     "color": route["color"],
                     "scheduled_time": iso(scheduled_time),
                     "predicted_time": iso(predicted),
+                    "estimated_time": iso(estimated),
+                    "estimate_method": "stop_order_interpolation"
+                    if estimated is not None
+                    else None,
+                    "estimate_anchor_sequences": [row["before_sequence"], row["after_sequence"]]
+                    if estimated is not None
+                    else None,
                     "time": iso(effective),
                     "event_type": event_type,
-                    "source": "live" if predicted is not None else "timetable",
+                    "source": "live"
+                    if predicted is not None
+                    else "estimated"
+                    if estimated is not None
+                    else "timetable",
                     "observed_at": iso(update["timestamp"])
                     if update and predicted is not None
                     else None,
@@ -226,6 +251,8 @@ class TransportEngine:
             "arrivals": arrivals,
             "status": "live"
             if any(r["source"] == "live" for r in arrivals)
+            else "estimated"
+            if any(r["source"] == "estimated" for r in arrivals)
             else "timetable"
             if arrivals
             else "times_unavailable"

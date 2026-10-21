@@ -49,8 +49,10 @@
           "data": {
             "name": "Name",
             "route_ids": "Lines (optional)",
-            "direction": "Direction"
-          }
+            "direction": "Direction",
+            "estimate_missing_times": "Estimate missing metro times"
+          },
+          "description": "Estimates divide the interval between two published times evenly by stop order. They are approximate, not live train predictions. Missing times outside published anchors remain unavailable."
         }
       },
       "error": {
@@ -101,6 +103,10 @@
         },
         "horizon_minutes": {
           "name": "Minutes ahead"
+        },
+        "estimate_missing_times": {
+          "name": "Estimate missing metro times",
+          "description": "Estimates divide the interval between two published times evenly by stop order. They are approximate, not live train predictions. Missing times outside published anchors remain unavailable."
         }
       }
     }

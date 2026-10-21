@@ -14,6 +14,7 @@ interface Config {
   type: string; title?: string; board_id?: string; stop_id?: string;
   route_ids?: string[]; show_map?: boolean; max_arrivals?: number;
   horizon_minutes?: number; tile_url?: string; language?: string;
+  estimate_missing_times?: boolean; direction_id?: number;
 }
 interface Route {route_id: string; short_name: string; agency: string; long_name: string}
 interface Stop {stop_id: string; name: string; platform: string; latitude: number; longitude: number; routes: {short_name: string; headsign: string; agency: string}[]}
@@ -21,17 +22,18 @@ interface Arrival {trip_id: string; route_id: string; route_name: string; headsi
 interface Alert {id: string; header: Record<string, string>; description: Record<string, string>}
 interface Board {stop: Stop; generated_at: string; arrivals: Arrival[]; alerts: Alert[]; status: string; realtime_status: string; alerts_status: string; error?: string}
 interface Vehicle {key: string; label: string; route_name: string; route_id: string; headsign: string; agency: string; latitude: number; longitude: number; observed_at: string; stop_status: string; stop_name: string | null; color: string}
-interface Metadata {routes: Route[]; boards: {board_id: string; title: string; stop_id: string; route_ids: string[]; direction_id?: number}[]; tracked_route_ids: string[]}
+interface Metadata {routes: Route[]; boards: {board_id: string; title: string; stop_id: string; route_ids: string[]; direction_id?: number; estimate_missing_times?: boolean}[]; tracked_route_ids: string[]}
 
 const TEXT: Record<string, Record<string, string>> = {
   en: {
     title: "Bucharest transport", search: "Search a station", hint: "Name, partial name, or spelling variant",
-    lines: "Line", all: "All selected lines", live: "Live", timetable: "Timetable", stale: "Stale",
+    lines: "Line", all: "All selected lines", live: "Live", timetable: "Timetable", estimated: "Estimated", stale: "Stale",
     no_service: "No service in the selected time window.", times_unavailable: "Published times are unavailable for this station.",
     loading: "Loading transit data…", unavailable: "Transit data is unavailable. Retrying…", choose: "Choose a station to see arrivals.",
     no_results: "No matching stations.", destination: "Destination", arrival: "Arrival", departure: "Departure",
     alerts: "Service alerts", stale_notice: "Live predictions are stale; published timetable times are shown where available.",
-    realtime_missing: "Live predictions are unavailable; times shown are from the timetable.",
+    realtime_missing: "Live predictions are unavailable for these arrivals.",
+    estimate_field: "Estimate missing metro times", estimate_notice: "Estimated times divide the interval between published stops evenly. Allow a margin for unequal station travel times and delays; these are not live train predictions.",
     stopped_at: "At", incoming_at: "Arriving at", in_transit_to: "Travelling to", unknown: "Stop status unknown",
     observed: "Observed", map_error: "The map could not load. Arrivals remain available.",
     tiles_error: "Map tiles are unavailable. Vehicle markers remain visible.", no_vehicles: "No fresh vehicles on the selected lines.",
@@ -41,12 +43,13 @@ const TEXT: Record<string, Record<string, string>> = {
   },
   ro: {
     title: "Transport București", search: "Caută o stație", hint: "Nume complet, parțial sau cu mici greșeli",
-    lines: "Linia", all: "Toate liniile selectate", live: "În timp real", timetable: "Orar", stale: "Date vechi",
+    lines: "Linia", all: "Toate liniile selectate", live: "În timp real", timetable: "Orar", estimated: "Estimat", stale: "Date vechi",
     no_service: "Nu sunt curse în intervalul ales.", times_unavailable: "Nu sunt publicate ore pentru această stație.",
     loading: "Se încarcă datele de transport…", unavailable: "Datele sunt indisponibile. Se reîncearcă…", choose: "Alege o stație pentru a vedea sosirile.",
     no_results: "Nu s-au găsit stații.", destination: "Destinație", arrival: "Sosire", departure: "Plecare",
     alerts: "Alerte de transport", stale_notice: "Predicțiile în timp real sunt vechi; se afișează orarul publicat, unde este disponibil.",
-    realtime_missing: "Predicțiile în timp real nu sunt disponibile; orele afișate provin din orar.",
+    realtime_missing: "Predicțiile în timp real nu sunt disponibile pentru aceste sosiri.",
+    estimate_field: "Estimează orele lipsă pentru metrou", estimate_notice: "Orele estimate împart uniform intervalul dintre stațiile cu ore publicate. Luați în calcul timpi diferiți între stații și întârzieri; acestea nu sunt predicții în timp real.",
     stopped_at: "În stația", incoming_at: "Sosește la", in_transit_to: "Spre stația", unknown: "Poziția față de stație este necunoscută",
     observed: "Observat la", map_error: "Harta nu s-a încărcat. Sosirile sunt disponibile.",
     tiles_error: "Fundalul hărții nu este disponibil. Pozițiile vehiculelor sunt vizibile.", no_vehicles: "Nu sunt vehicule cu date recente pe liniile selectate.",
@@ -73,6 +76,7 @@ export class BucharestTransportCard extends LitElement {
   private _searchDone = false;
   private _stopId?: string;
   private _directionId?: number;
+  private _estimateMissingTimes = false;
   private _ready = false;
   private _starting = false;
   private _mapError = false;
@@ -146,7 +150,8 @@ export class BucharestTransportCard extends LitElement {
       this._metadata = data;
       const saved = data.boards.find(b => b.board_id === this._config.board_id);
       this._stopId = this._config.stop_id || saved?.stop_id || this._stopId;
-      this._directionId = saved?.direction_id;
+      this._directionId = this._config.direction_id ?? saved?.direction_id;
+      this._estimateMissingTimes = this._config.estimate_missing_times ?? saved?.estimate_missing_times ?? false;
       this._routeIds = this._config.route_ids || saved?.route_ids || [];
       this._ready = true; this._error = ""; clearTimeout(this._retryTimer); this._retryTimer = undefined;
       if (this._stopId) await this._subscribeBoard();
@@ -157,7 +162,7 @@ export class BucharestTransportCard extends LitElement {
     if (!this._stopId || !this._hass) return;
     this._boardUnsub?.(); this._boardUnsub = undefined;
     const seq = ++this._boardSeq;
-    const msg: Record<string, unknown> = {type: "bucharest_transport/subscribe_board", stop_id: this._stopId, route_ids: this._routeIds, limit: this._config.max_arrivals || 10, horizon_minutes: this._config.horizon_minutes || 60};
+    const msg: Record<string, unknown> = {type: "bucharest_transport/subscribe_board", stop_id: this._stopId, route_ids: this._routeIds, limit: this._config.max_arrivals || 10, horizon_minutes: this._config.horizon_minutes || 60, estimate_missing_times: this._estimateMissingTimes};
     if (this._directionId !== undefined) msg.direction_id = this._directionId;
     const unsub = await this._hass.connection.subscribeMessage<Board>(data => {
       if (seq !== this._boardSeq || !this.isConnected) return;
@@ -261,12 +266,13 @@ export class BucharestTransportCard extends LitElement {
     const stale = board && (board.realtime_status === "stale" || Date.now() - Date.parse(board.generated_at) > 90000);
     return html`<ha-card><div class="content">
       <header><div class="eyebrow">TPBI · BUCUREȘTI–ILFOV</div><h2>${this._config.title || board?.stop.name || this.t("title")}</h2>
-      ${board ? html`<span class="status ${stale ? "stale" : board.status}">${this.t(stale ? "stale" : board.status === "live" ? "live" : board.status === "timetable" ? "timetable" : "arrival")}</span>` : nothing}</header>
+      ${board ? html`<span class="status ${stale ? "stale" : board.status}">${this.t(stale ? "stale" : board.status === "live" ? "live" : board.status === "timetable" ? "timetable" : board.status === "estimated" ? "estimated" : "arrival")}</span>` : nothing}</header>
       <label class="search-label">${this.t("search")}<input type="search" maxlength="120" .value=${this._query} placeholder=${this.t("hint")} @input=${this._search}></label>
       ${this._results.length ? html`<div class="results">${this._results.map(s => html`<button @click=${() => this._choose(s)}><strong>${s.name}</strong><small>${s.platform || s.stop_id} · ${[...new Set(s.routes.map(r => `${r.short_name} ${r.agency}`))].join(", ")}</small></button>`)}</div>` : this._searchDone ? html`<p class="message">${this.t("no_results")}</p>` : nothing}
       <label class="line-label">${this.t("lines")}<select @change=${this._line} .value=${this._routeIds.length === 1 ? this._routeIds[0] : ""}><option value="">${this.t("all")}</option>${(this._metadata?.routes || []).map(r => html`<option value=${r.route_id}>${r.short_name} · ${r.agency}</option>`)}</select></label>
       ${this._error ? html`<p role="status" class="notice">${this._error}</p>` : !this._ready ? html`<p role="status" class="message">${this.t("loading")}</p>` : !board ? html`<p class="message">${this.t("choose")}</p>` : nothing}
       ${board && (board.realtime_status !== "fresh" || stale) ? html`<p class="notice">${this.t(stale ? "stale_notice" : "realtime_missing")}</p>` : nothing}
+      ${board?.arrivals.some(row => row.source === "estimated") ? html`<p class="notice estimate-notice">${this.t("estimate_notice")}</p>` : nothing}
       ${board?.arrivals.length ? html`<div class="arrivals" role="list">${board.arrivals.map(row => html`<div class="arrival" role="listitem"><span class="route-pill" style="border-color:${color(row.color)};color:${color(row.color)}">${row.route_name}</span><div class="destination"><strong>${row.headsign || row.agency}</strong><small>${row.agency} · <span class="source ${this._source(row)}">${this.t(this._source(row))}</span>${row.event_type === "departure" ? html` · ${this.t("departure")}` : nothing}</small></div><div class="when"><strong>${this._minutes(row.time)}</strong><small>${this._formatTime(row.time)}</small></div></div>`)}</div>` : board ? html`<p class="message empty-state">${this.t(board.status)}</p>` : nothing}
       ${board?.alerts.length ? html`<details class="alerts"><summary>${this.t("alerts")} (${board.alerts.length})</summary>${board.alerts.map(a => html`<article><strong>${a.header[this.language] || a.header.ro || Object.values(a.header)[0]}</strong><p>${a.description[this.language] || a.description.ro || Object.values(a.description)[0]}</p></article>`)}</details>` : nothing}
       ${board && board.alerts_status !== "fresh" ? html`<small class="message">${this.t("alerts_unavailable")}</small>` : nothing}
@@ -298,6 +304,7 @@ export class BucharestTransportEditor extends LitElement {
     <label>${this.t("board_field")}<select .value=${this._config.board_id || ""} @change=${(e: Event) => this.change("board_id", (e.target as HTMLSelectElement).value)}><option value="">—</option>${this._metadata?.boards.map(b => html`<option value=${b.board_id}>${b.title}</option>`)}</select></label>
     <label>${this.t("stop_field")}<input .value=${this._config.stop_id || ""} @change=${(e: Event) => this.change("stop_id", (e.target as HTMLInputElement).value)}></label>
     <label>${this.t("lines")}<select multiple size="5" @change=${(e: Event) => this.change("route_ids", Array.from((e.target as HTMLSelectElement).selectedOptions).map(o => o.value))}>${this._metadata?.routes.map(r => html`<option value=${r.route_id} ?selected=${this._config.route_ids?.includes(r.route_id)}>${r.short_name} · ${r.agency}</option>`)}</select></label>
+    <label class="check"><input type="checkbox" .checked=${(this._config.estimate_missing_times ?? this._metadata?.boards.find(b => b.board_id === this._config.board_id)?.estimate_missing_times ?? false)} @change=${(e: Event) => this.change("estimate_missing_times", (e.target as HTMLInputElement).checked)}>${this.t("estimate_field")}</label>
     <label class="check"><input type="checkbox" .checked=${this._config.show_map !== false} @change=${(e: Event) => this.change("show_map", (e.target as HTMLInputElement).checked)}>${this.t("map_field")}</label>
     <label>${this.t("limit_field")}<input type="number" min="1" max="50" .value=${String(this._config.max_arrivals || 10)} @change=${(e: Event) => this.change("max_arrivals", Number((e.target as HTMLInputElement).value))}></label>
     <label>${this.t("horizon_field")}<input type="number" min="1" max="1440" .value=${String(this._config.horizon_minutes || 60)} @change=${(e: Event) => this.change("horizon_minutes", Number((e.target as HTMLInputElement).value))}></label>

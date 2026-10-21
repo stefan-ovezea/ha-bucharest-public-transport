@@ -10,11 +10,15 @@ const time = minutes => new Date(Date.now()+minutes*60000).toISOString();
 window.activeSubscriptions = 0;
 window.commands = [];
 window.handlers = {};
-window.metadata = {routes:[{route_id:"041",short_name:"41",agency:"STB SA",long_name:"Ghencea - Piața Presei"},{route_id:"M1",short_name:"M1",agency:"METROREX SA",long_name:"Dristor - Pantelimon"}],boards:[{board_id:"saved",title:"Piața Unirii",stop_id:"U",route_ids:[]}],tracked_route_ids:["041"]};
+window.metadata = {routes:[{route_id:"041",short_name:"41",agency:"STB SA",long_name:"Ghencea - Piața Presei"},{route_id:"M1",short_name:"M1",agency:"METROREX SA",long_name:"Dristor - Pantelimon"}],boards:[{board_id:"saved",title:"Piața Unirii",stop_id:"U",route_ids:[],estimate_missing_times:q.get("state")==="estimated"}],tracked_route_ids:["041"]};
 window.board = {stop,generated_at:time(0),status:q.get("state")||"live",realtime_status:q.get("stale")?"stale":"fresh",alerts_status:"fresh",arrivals:[],alerts:[]};
 if (!["no_service","times_unavailable"].includes(window.board.status)) {
  window.board.arrivals = [3,8,12].map((m,i) => ({trip_id:`T${i}`,route_id:"041",route_name:"41",headsign:i===1?"Ghencea":"Piața Presei",agency:"STB SA",source:i===2?"timetable":"live",time:time(m),scheduled_time:time(m-1),predicted_time:i===2?null:time(m),observed_at:time(0),age_seconds:i===2?null:0,event_type:"arrival",color:"176D8C",stop_id:"U"}));
  window.board.alerts = [{id:"A",header:{en:"Temporary platform change",ro:"Schimbare temporară de peron"},description:{en:"Use the adjacent stop during construction.",ro:"Folosiți stația alăturată pe durata lucrărilor."}}];
+}
+if (window.board.status === "estimated") {
+ window.board.realtime_status = "unavailable";
+ window.board.arrivals = window.board.arrivals.map(row => ({...row, source: "estimated", scheduled_time: null, predicted_time: null, observed_at: null, age_seconds: null, estimated_time: row.time}));
 }
 window.hass = {
  language:q.get("lang")||"en",config:{time_zone:"Europe/Bucharest"},

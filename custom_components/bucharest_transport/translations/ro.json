@@ -49,8 +49,10 @@
           "data": {
             "name": "Nume",
             "route_ids": "Linii (opțional)",
-            "direction": "Sens"
-          }
+            "direction": "Sens",
+            "estimate_missing_times": "Estimează orele lipsă pentru metrou"
+          },
+          "description": "Estimările împart uniform intervalul dintre două ore publicate, după ordinea stațiilor. Sunt aproximative, nu poziții sau predicții în timp real. Nu se estimează în afara orelor de referință."
         }
       },
       "error": {
@@ -101,6 +103,10 @@
         },
         "horizon_minutes": {
           "name": "Minute în avans"
+        },
+        "estimate_missing_times": {
+          "name": "Estimează orele lipsă pentru metrou",
+          "description": "Estimările împart uniform intervalul dintre două ore publicate, după ordinea stațiilor. Sunt aproximative, nu poziții sau predicții în timp real. Nu se estimează în afara orelor de referință."
         }
       }
     }

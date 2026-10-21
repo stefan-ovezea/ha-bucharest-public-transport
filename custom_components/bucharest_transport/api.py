@@ -12,6 +12,7 @@ from homeassistant.helpers import config_validation as cv
 from .const import DOMAIN
 
 _FILTERS = {
+    vol.Optional("estimate_missing_times", default=False): cv.boolean,
     vol.Optional("route_ids", default=[]): vol.All([str], vol.Length(max=250)),
     vol.Optional("direction_id"): vol.All(vol.Coerce(int), vol.In([0, 1])),
     vol.Optional("limit", default=10): vol.All(cv.positive_int, vol.Range(min=1, max=50)),
@@ -31,7 +32,14 @@ def _coordinator(hass):
 def _parameters(msg):
     return {
         k: msg[k]
-        for k in ("stop_id", "route_ids", "direction_id", "limit", "horizon_minutes")
+        for k in (
+            "stop_id",
+            "route_ids",
+            "direction_id",
+            "limit",
+            "horizon_minutes",
+            "estimate_missing_times",
+        )
         if k in msg
     }
 
@@ -157,7 +165,7 @@ async def subscribe_board(hass, connection, msg):
         if board is None or board.subentry_type != "board":
             connection.send_error(msg["id"], "invalid_board", "Unknown station board")
             return
-        parameters = {**parameters, **dict(board.data)}
+        parameters = {**parameters, "estimate_missing_times": False, **dict(board.data)}
     if "stop_id" not in parameters:
         connection.send_error(msg["id"], "invalid_stop", "stop_id or board_id is required")
         return

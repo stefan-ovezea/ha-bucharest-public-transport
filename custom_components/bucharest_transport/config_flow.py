@@ -113,7 +113,11 @@ class BoardSubentryFlow(ConfigSubentryFlow):
 
     async def async_step_filters(self, user_input=None):
         if user_input is not None:
-            data = {"stop_id": self._stop_id, "route_ids": user_input.get("route_ids", [])}
+            data = {
+                "stop_id": self._stop_id,
+                "route_ids": user_input.get("route_ids", []),
+                "estimate_missing_times": user_input.get("estimate_missing_times", False),
+            }
             if user_input["direction"] != "both":
                 data["direction_id"] = int(user_input["direction"])
             if self.source == SOURCE_RECONFIGURE:
@@ -126,21 +130,29 @@ class BoardSubentryFlow(ConfigSubentryFlow):
             return self.async_create_entry(title=user_input["name"], data=data)
         stop = self.coordinator.engine.schedule.stops[self._stop_id]
         allowed = {r["route_id"] for r in stop["routes"]}
+        saved = self._get_reconfigure_subentry() if self.source == SOURCE_RECONFIGURE else None
+        defaults = dict(saved.data) if saved else {}
         return self.async_show_form(
             step_id="filters",
             data_schema=vol.Schema(
                 {
-                    vol.Required("name", default=stop["name"]): str,
-                    vol.Optional("route_ids", default=[]): _select(
+                    vol.Required("name", default=saved.title if saved else stop["name"]): str,
+                    vol.Optional("route_ids", default=defaults.get("route_ids", [])): _select(
                         [r for r in route_options(self.coordinator) if r["value"] in allowed], True
                     ),
-                    vol.Required("direction", default="both"): _select(
+                    vol.Required(
+                        "direction", default=str(defaults.get("direction_id", "both"))
+                    ): _select(
                         [
                             {"value": "both", "label": "Both directions / Ambele sensuri"},
                             {"value": "0", "label": "0"},
                             {"value": "1", "label": "1"},
                         ]
                     ),
+                    vol.Optional(
+                        "estimate_missing_times",
+                        default=defaults.get("estimate_missing_times", False),
+                    ): bool,
                 }
             ),
         )

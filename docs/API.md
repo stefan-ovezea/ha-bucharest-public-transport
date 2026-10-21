@@ -24,20 +24,20 @@ Returns `routes`, `boards`, and `tracked_route_ids`. Route records include opera
 {"id": 3, "type": "bucharest_transport/subscribe_board", "stop_id": "15100", "limit": 10, "horizon_minutes": 60}
 ```
 
-Supply `stop_id` or `board_id`. Optional filters are `route_ids` (string array) and `direction_id` (0 or 1). A saved board's configured stop and filters take precedence over request filters. Limits are 1–50 calls and 1–1440 minutes.
+Supply `stop_id` or `board_id`. Optional filters are `route_ids` (string array), `direction_id` (0 or 1), and `estimate_missing_times` (boolean, default false). A saved board's configured stop and filters take precedence over request filters. Limits are 1–50 calls and 1–1440 minutes.
 
 After an acknowledgement, an initial event is sent immediately and updates follow shared feed refreshes. Events have the same shape as the `bucharest_transport.get_arrivals` action response:
 
 - `stop`: selected physical stop or parent station.
 - `generated_at`: UTC ISO timestamp.
 - `arrivals`: sorted calls, keyed by service date, trip, instance start time, and stop sequence. Fields include `trip_id`, `service_date`, `start_time`, `stop_sequence`, `stop_id`, `route_id`, `route_name`, `agency`, `agency_id`, `direction_id`, `headsign`, `color`, `scheduled_time`, `predicted_time`, `time`, `event_type`, `source`, `observed_at`, `timestamp_basis`, `age_seconds`, and `delay_seconds`.
-- `status`: `live`, `timetable`, `no_service`, or `times_unavailable`.
+- `status`: `live`, `timetable`, `estimated`, `no_service`, or `times_unavailable`.
 - `realtime_status` / `alerts_status`: `fresh`, `stale`, or `unavailable`. Prediction availability is evaluated for the board's lines and direction, so fresh surface feeds do not imply Metrorex coverage.
 - `timetable_valid`: whether the cached schedule covers the current local date.
 - `alerts`: currently relevant, fresh alerts with translated `header`, `description`, `url`, active periods, and selectors.
 - `cancelled_calls`: calls suppressed by fresh trip cancellations within evaluated candidates.
 
-Missing times are JSON `null`. `source` is `live` only when a usable prediction exists. `timestamp_basis` distinguishes record and feed timestamps. `event_type` distinguishes arrivals and departures. There is no interpolation of missing timetable times.
+Missing times are JSON `null`. `source` is `live` only when a usable prediction exists. `timestamp_basis` distinguishes record and feed timestamps. `event_type` distinguishes arrivals and departures. With `estimate_missing_times: true`, missing subway calls bounded by published times are interpolated evenly by actual stop order. These have `source: estimated`, `estimated_time`, `estimate_method: stop_order_interpolation`, and `estimate_anchor_sequences`. Their published `scheduled_time` remains null. No extrapolation is performed, and realtime delays are not applied to estimated bases. Explicit live events, cancellations and skips take precedence. Saved board settings override the request option. Estimates do not indicate observed train movement and have no known error bound.
 
 ## Vehicle subscription
 

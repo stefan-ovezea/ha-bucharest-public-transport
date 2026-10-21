@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" fill="none">
+  <title>Bucharest Public Transport</title>
+  <desc>A friendly teal bus with a smiling face and warm yellow headlights.</desc>
+  <g stroke="#143D50" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="59" y="199" width="29" height="33" rx="11" fill="#143D50"/>
+    <rect x="168" y="199" width="29" height="33" rx="11" fill="#143D50"/>
+    <rect x="29" y="88" width="19" height="42" rx="9" fill="#49B9BB"/>
+    <rect x="208" y="88" width="19" height="42" rx="9" fill="#49B9BB"/>
+    <path d="M47 71C47 39 62 24 91 24H165C194 24 209 39 209 71V189C209 209 199 218 180 218H76C57 218 47 209 47 189Z" fill="#49B9BB"/>
+    <rect x="82" y="38" width="92" height="21" rx="10" fill="#FFD477" stroke="none"/>
+    <rect x="61" y="72" width="134" height="81" rx="23" fill="#E8F8F6"/>
+    <path d="M112 177Q128 193 144 177"/>
+    <path d="M102 204H154" stroke="#24898F"/>
+  </g>
+  <path d="M74 88Q77 82 83 82H110" stroke="white" stroke-width="7" stroke-linecap="round"/>
+  <ellipse cx="96" cy="118" rx="7" ry="10" fill="#143D50"/>
+  <ellipse cx="160" cy="118" rx="7" ry="10" fill="#143D50"/>
+  <circle cx="98" cy="115" r="2" fill="white"/>
+  <circle cx="162" cy="115" r="2" fill="white"/>
+  <ellipse cx="79" cy="134" rx="10" ry="5" fill="#F2B5A2"/>
+  <ellipse cx="177" cy="134" rx="10" ry="5" fill="#F2B5A2"/>
+  <rect x="64" y="169" width="26" height="19" rx="9" fill="#FFD477" stroke="#143D50" stroke-width="5"/>
+  <rect x="166" y="169" width="26" height="19" rx="9" fill="#FFD477" stroke="#143D50" stroke-width="5"/>
+</svg>

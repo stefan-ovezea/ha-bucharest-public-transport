@@ -76,7 +76,7 @@ class TransportCoordinator(DataUpdateCoordinator[dict]):
 
     async def _fetch(self, url, state, maximum):
         headers = {
-            "User-Agent": "BucharestPublicTransport/0.1.0 (+https://github.com/stefan-ovezea/ha-bucharest-public-transport)"
+            "User-Agent": "BucharestPublicTransport/0.2.0 (+https://github.com/stefan-ovezea/ha-bucharest-public-transport)"
         }
         if state.etag:
             headers["If-None-Match"] = state.etag
@@ -181,7 +181,13 @@ class TransportCoordinator(DataUpdateCoordinator[dict]):
         return await self.hass.async_add_executor_job(search, stops, query)
 
     async def async_board(
-        self, stop_id, route_ids=None, direction_id=None, limit=10, horizon_minutes=60
+        self,
+        stop_id,
+        route_ids=None,
+        direction_id=None,
+        limit=10,
+        horizon_minutes=60,
+        estimate_missing_times=False,
     ):
         key = (
             self.generation,
@@ -190,6 +196,7 @@ class TransportCoordinator(DataUpdateCoordinator[dict]):
             direction_id,
             limit,
             horizon_minutes,
+            estimate_missing_times,
         )
         if key not in self._board_tasks:
             self._board_tasks[key] = self.hass.async_add_executor_job(
@@ -200,6 +207,7 @@ class TransportCoordinator(DataUpdateCoordinator[dict]):
                 direction_id,
                 limit,
                 horizon_minutes,
+                estimate_missing_times,
             )
         try:
             return await asyncio.shield(self._board_tasks[key])

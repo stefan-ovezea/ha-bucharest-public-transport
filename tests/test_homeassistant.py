@@ -121,7 +121,11 @@ async def test_subentry_search_and_filters_use_real_selectors(coordinator):
         result = await flow.async_step_filters(
             {"name": "Home", "route_ids": ["041"], "direction": "both"}
         )
-        assert result["data"] == {"stop_id": "U", "route_ids": ["041"]}
+        assert result["data"] == {
+            "stop_id": "U",
+            "route_ids": ["041"],
+            "estimate_missing_times": False,
+        }
 
 
 async def test_options_can_select_lines_and_config_flow_is_keyless(coordinator):
@@ -170,3 +174,32 @@ async def test_http_not_modified_does_not_renew_old_record_timestamps(coordinato
         await coordinator._poll("tripUpdates", "url", 30)
         assert coordinator.engine.feeds["tripUpdates"].timestamp == now
         assert not coordinator.engine.feeds["tripUpdates"].fresh(now + 100)
+
+
+async def test_saved_estimate_can_drive_timestamp_sensor_and_caches_separately(coordinator, now):
+    from custom_components.bucharest_transport.transport.schedule import Schedule
+
+    payload = archive(
+        {
+            "stop_times.txt": [
+                ["trip_id", "arrival_time", "departure_time", "stop_id", "stop_sequence"],
+                ["METRO", "12:04:00", "12:04:00", "MA", "0"],
+                ["METRO", "", "", "MB", "1"],
+                ["METRO", "12:08:00", "12:08:00", "U", "2"],
+            ]
+        }
+    )
+    await coordinator.hass.async_add_executor_job(import_feed, payload, coordinator.cache_path)
+    schedule = await coordinator.hass.async_add_executor_job(Schedule, coordinator.cache_path)
+    coordinator.engine = TransportEngine(schedule)
+    with patch("custom_components.bucharest_transport.coordinator.time.time", return_value=now):
+        published, estimated = await asyncio.gather(
+            coordinator.async_board("MB"),
+            coordinator.async_board("MB", estimate_missing_times=True),
+        )
+    assert not published["arrivals"]
+    coordinator.data = {"boards": {"board": estimated}}
+    sensor = ArrivalSensor(coordinator, "board", "arrival")
+    assert sensor.native_value.isoformat() == "2026-10-21T09:06:00+00:00"
+    assert sensor.extra_state_attributes["status"] == "estimated"
+    assert sensor.extra_state_attributes["arrivals"][0]["source"] == "estimated"
