@@ -1,6 +1,9 @@
 """Use real HA resource collections to exercise installs and resource migration."""
 
+import json
+from pathlib import Path
 from unittest.mock import AsyncMock, patch
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from homeassistant.components.lovelace import LovelaceData
@@ -30,6 +33,10 @@ async def test_installs_one_module_and_repeated_setup_is_idempotent(hass, resour
     first = resources.async_items()[0].copy()
     assert first["type"] == "module"
     assert first["url"].startswith(CARD_URL + "?v=")
+    query = parse_qs(urlsplit(first["url"]).query)
+    manifest = Path(__file__).parents[1] / "custom_components/bucharest_transport/manifest.json"
+    assert query["v"] == [json.loads(manifest.read_text())["version"]]
+    assert len(query["hash"][0]) == 16
     await async_register_card(hass)
     assert resources.async_items() == [first]
 

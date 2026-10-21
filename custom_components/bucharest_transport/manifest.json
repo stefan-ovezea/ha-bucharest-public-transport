@@ -10,5 +10,5 @@
   "issue_tracker": "https://github.com/stefan-ovezea/ha-bucharest-public-transport/issues",
   "requirements": ["gtfs-realtime-bindings==3.0.0"],
   "single_config_entry": true,
-  "version": "0.2.2"
+  "version": "0.2.3"
 }

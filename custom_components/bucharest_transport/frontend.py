@@ -1,6 +1,7 @@
 """Register the bundled card with Home Assistant's dashboard resources."""
 
 import hashlib
+import json
 import logging
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -16,7 +17,8 @@ CARD_FILE = Path(__file__).parent / "www" / "bucharest-transport-card.js"
 def _card_url():
     """Change the browser URL whenever the bundled JavaScript changes."""
     digest = hashlib.sha256(CARD_FILE.read_bytes()).hexdigest()[:16]
-    return f"{CARD_URL}?v={digest}"
+    version = json.loads(Path(__file__).with_name("manifest.json").read_text())["version"]
+    return f"{CARD_URL}?v={version}&hash={digest}"
 
 
 def _is_card(url):

@@ -142,3 +142,13 @@ test("Academia search clears surface filters and offers labelled estimates in th
   await expect(page.getByLabel("Estimate missing metro times", {exact:true})).toBeChecked();
   await expect(page.locator(".source.estimated")).toHaveCount(1);
 });
+
+
+test("card stays visible through Home Assistant's original picker registry reference", async ({page}) => {
+  await page.goto("/");
+  expect(await page.evaluate(() => window.haPickerCards.filter(c => c.type === "bucharest-transport-card").length)).toBe(1);
+  expect(await page.evaluate(() => window.customCards === window.haPickerCards)).toBe(true);
+  await page.evaluate(async () => {await import("/card.js?reload=picker");});
+  expect(await page.evaluate(() => window.haPickerCards.filter(c => c.type === "bucharest-transport-card").length)).toBe(1);
+  expect(await page.evaluate(() => window.customCards === window.haPickerCards)).toBe(true);
+});

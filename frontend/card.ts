@@ -328,5 +328,9 @@ export class BucharestTransportEditor extends LitElement {
 if (!customElements.get("bucharest-transport-card")) customElements.define("bucharest-transport-card", BucharestTransportCard);
 if (!customElements.get("bucharest-transport-card-editor")) customElements.define("bucharest-transport-card-editor", BucharestTransportEditor);
 const registry = window as unknown as {customCards: {type?: string; [key: string]: unknown}[]};
-registry.customCards = (registry.customCards || []).filter(card => card.type?.replace(/^custom:/, "") !== "bucharest-transport-card");
+// Home Assistant imports this array by reference. Preserve it during deduplication.
+registry.customCards = registry.customCards || [];
+for (let index = registry.customCards.length - 1; index >= 0; index--) {
+  if (registry.customCards[index].type?.replace(/^custom:/, "") === "bucharest-transport-card") registry.customCards.splice(index, 1);
+}
 registry.customCards.push({type: "bucharest-transport-card", name: "Bucharest Public Transport", description: "TPBI station arrivals and live vehicles", preview: true});

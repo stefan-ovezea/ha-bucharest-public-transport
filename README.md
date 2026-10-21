@@ -48,7 +48,7 @@ Use the integration's **Configure** options to select lines for GPS vehicle enti
 
 ### Add the dashboard card
 
-The card JavaScript is installed together with the integration. With UI-managed dashboard resources (the default), the integration automatically registers it on startup and updates its resource URL when the bundled file changes. Existing manual entries for this card are migrated and duplicate entries are consolidated.
+The card JavaScript is installed together with the integration. With UI-managed dashboard resources (the default), the integration automatically registers it on startup and updates its resource URL when the bundled file changes. The URL includes the installed release version (`v=0.2.3`, for example) and a separate `hash` fingerprint for browser cache refreshes; the fingerprint is not a Git commit ID. Existing manual entries for this card are migrated and duplicate entries are consolidated.
 
 After installing or upgrading, restart Home Assistant, refresh your browser, and add **Bucharest Public Transport** from the card picker. Its visual editor lets you select a saved board or leave it open for station searches. No separate card download or manual version suffix is required.
 
