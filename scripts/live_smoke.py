@@ -22,7 +22,7 @@ def fetch(item):
     request = urllib.request.Request(
         url,
         headers={
-            "User-Agent": "BucharestPublicTransport/0.2.0 (+https://github.com/stefan-ovezea/ha-bucharest-public-transport)"
+            "User-Agent": "BucharestPublicTransport/0.2.1 (+https://github.com/stefan-ovezea/ha-bucharest-public-transport)"
         },
     )
     with urllib.request.urlopen(request, timeout=45) as response:

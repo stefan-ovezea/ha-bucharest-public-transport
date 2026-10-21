@@ -76,7 +76,7 @@ class TransportCoordinator(DataUpdateCoordinator[dict]):
 
     async def _fetch(self, url, state, maximum):
         headers = {
-            "User-Agent": "BucharestPublicTransport/0.2.0 (+https://github.com/stefan-ovezea/ha-bucharest-public-transport)"
+            "User-Agent": "BucharestPublicTransport/0.2.1 (+https://github.com/stefan-ovezea/ha-bucharest-public-transport)"
         }
         if state.etag:
             headers["If-None-Match"] = state.etag

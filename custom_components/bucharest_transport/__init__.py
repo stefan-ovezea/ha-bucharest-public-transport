@@ -8,6 +8,7 @@ from homeassistant.helpers import config_validation as cv
 
 from .const import CARD_URL, DOMAIN
 from .coordinator import TransportCoordinator
+from .frontend import async_register_card
 
 PLATFORMS = [Platform.SENSOR, Platform.BINARY_SENSOR, Platform.DEVICE_TRACKER]
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
@@ -24,6 +25,7 @@ async def async_setup(hass, config):
             )
         ]
     )
+    await async_register_card(hass)
     return True
 
 

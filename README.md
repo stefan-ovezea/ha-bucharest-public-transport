@@ -48,10 +48,21 @@ Use the integration's **Configure** options to select lines for GPS vehicle enti
 
 ### Add the dashboard card
 
-1. Enable Advanced Mode in your Home Assistant profile if the Resources menu is hidden.
-2. Open **Settings → Dashboards → menu → Resources → Add resource**.
-3. Set URL to `/bucharest_transport/bucharest-transport-card.js?v=0.2.0` and type to **JavaScript module**.
-4. Add the **Bucharest Public Transport** card using the card picker. Use its visual editor to select a saved board or leave it open for station searches.
+The card JavaScript is installed together with the integration. With UI-managed dashboard resources (the default), the integration automatically registers it on startup and updates its resource URL when the bundled file changes. Existing manual entries for this card are migrated and duplicate entries are consolidated.
+
+After installing or upgrading, restart Home Assistant, refresh your browser, and add **Bucharest Public Transport** from the card picker. Its visual editor lets you select a saved board or leave it open for station searches. No separate card download or manual version suffix is required.
+
+If you explicitly manage dashboard **resources in YAML**, add this entry once under `lovelace.resources` in `configuration.yaml`:
+
+```yaml
+lovelace:
+  resource_mode: yaml
+  resources:
+    - url: /bucharest_transport/bucharest-transport-card.js
+      type: module
+```
+
+The integration serves that URL without long-lived cache headers; the JS file is still updated with the integration. It does not edit your YAML. YAML dashboard definitions alone do not prevent automatic registration when resources remain UI-managed.
 
 Example:
 
@@ -78,7 +89,7 @@ horizon_minutes: 60
 
 The map initially shows the configured or watched lines. Selecting a line in the card explores that line without creating additional Home Assistant entities. Map tiles are fetched by your browser; transit feeds are fetched only by Home Assistant. No frontend libraries load from a CDN.
 
-After an upgrade, update the resource's `?v=` suffix if your browser retains an old card.
+After an upgrade, refresh open dashboards so the browser loads the updated JavaScript. UI-managed resource URLs are maintained automatically.
 
 ## Using arrivals in automations
 
@@ -183,7 +194,7 @@ HACS uses published GitHub release tags for versions; a manifest change or Git t
 
 For each stable release:
 
-1. Set the same semantic version (for example `0.2.1`) in `custom_components/bucharest_transport/manifest.json`, `package.json`, both root version fields in `package-lock.json`, and `pyproject.toml`. Update the README card resource suffix and the User-Agent version in the coordinator and live smoke script.
+1. Set the same semantic version (for example `0.2.1`) in `custom_components/bucharest_transport/manifest.json`, `package.json`, both root version fields in `package-lock.json`, and `pyproject.toml`. Update the User-Agent version in the coordinator and live smoke script. The dashboard resource uses a content hash and needs no manual version update.
 2. Rebuild the card, run the checks above, then commit and push the release changes to `main`.
 3. Create and push a matching tag, for example `git tag v0.2.1` then `git push origin v0.2.1`.
 4. Wait for the **Release** workflow to validate the versions, build the card, attach the installation ZIP, and publish the GitHub release. If it fails, fix the reported issue before publishing a release.

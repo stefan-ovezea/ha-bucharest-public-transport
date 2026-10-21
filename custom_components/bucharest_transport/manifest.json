@@ -3,12 +3,12 @@
   "name": "Bucharest Public Transport",
   "codeowners": ["@stefan-ovezea"],
   "config_flow": true,
-  "dependencies": ["http", "websocket_api"],
+  "dependencies": ["http", "lovelace", "websocket_api"],
   "documentation": "https://github.com/stefan-ovezea/ha-bucharest-public-transport",
   "integration_type": "service",
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/stefan-ovezea/ha-bucharest-public-transport/issues",
   "requirements": ["gtfs-realtime-bindings==3.0.0"],
   "single_config_entry": true,
-  "version": "0.2.0"
+  "version": "0.2.1"
 }

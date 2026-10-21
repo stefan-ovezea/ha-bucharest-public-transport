@@ -6,11 +6,13 @@ from pathlib import Path
 from unittest.mock import patch
 
 from homeassistant import auth, loader
+from homeassistant.components.lovelace.const import LOVELACE_DATA
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.helpers import area_registry, device_registry, floor_registry, label_registry
 from homeassistant.helpers import entity_registry as er
 from homeassistant.setup import async_setup_component
 
+from custom_components.bucharest_transport.const import CARD_URL
 from custom_components.bucharest_transport.coordinator import TransportCoordinator
 
 from .conftest import archive, message, trip_update, vehicle
@@ -59,6 +61,10 @@ async def test_full_install_action_entities_and_unload(hass, entry):
         await hass.config_entries.async_add(entry)
         await hass.async_block_till_done()
         assert entry.state is ConfigEntryState.LOADED
+        resources = hass.data[LOVELACE_DATA].resources.async_items()
+        assert len(resources) == 1
+        assert resources[0]["type"] == "module"
+        assert resources[0]["url"].startswith(CARD_URL + "?v=")
         assert hass.services.has_service("bucharest_transport", "get_arrivals")
         response = await hass.services.async_call(
             "bucharest_transport",
