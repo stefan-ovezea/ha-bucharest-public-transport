@@ -1,0 +1,108 @@
+{
+  "title": "Transport public București",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Transport public București",
+        "description": "Datele TPBI se descarcă fără cont sau cheie API. Prima importare poate dura un minut. După configurare, adaugă panouri de stație și selectează liniile urmărite din opțiuni. Datele Metrorex sunt limitate la orar și alerte, unde sunt publicate."
+      }
+    },
+    "abort": {
+      "already_configured": "Integrarea este deja configurată."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Linii urmărite",
+        "description": "Se creează entități GPS numai pentru liniile selectate. Panourile de stație se configurează separat.",
+        "data": {
+          "tracked_route_ids": "Linii urmărite",
+          "tracked_direction": "Sens urmărit"
+        }
+      }
+    }
+  },
+  "config_subentries": {
+    "board": {
+      "entry_type": "Panou de stație",
+      "initiate_flow": {
+        "user": "Adaugă panou de stație",
+        "reconfigure": "Reconfigurează stația"
+      },
+      "step": {
+        "user": {
+          "title": "Caută o stație",
+          "description": "Poți omite diacriticele sau scrie un nume parțial.",
+          "data": {
+            "query": "Nume stație"
+          }
+        },
+        "stop": {
+          "title": "Alege stația sau peronul",
+          "data": {
+            "stop_id": "Stație / peron"
+          }
+        },
+        "filters": {
+          "title": "Configurează panoul",
+          "data": {
+            "name": "Nume",
+            "route_ids": "Linii (opțional)",
+            "direction": "Sens"
+          }
+        }
+      },
+      "error": {
+        "no_stops": "Nu s-au găsit stații. Încearcă alt nume."
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "next_arrival": {
+        "name": "Următoarea sosire"
+      },
+      "timetable_health": {
+        "name": "Stare orar"
+      },
+      "positions_health": {
+        "name": "Stare poziții vehicule"
+      },
+      "predictions_health": {
+        "name": "Stare predicții sosire"
+      },
+      "alerts_health": {
+        "name": "Stare flux alerte"
+      }
+    },
+    "binary_sensor": {
+      "service_alerts": {
+        "name": "Alerte de transport"
+      }
+    }
+  },
+  "services": {
+    "get_arrivals": {
+      "name": "Obține sosirile",
+      "description": "Returnează orele publicate și predicțiile recente pentru o stație.",
+      "fields": {
+        "stop_id": {
+          "name": "ID stație"
+        },
+        "route_ids": {
+          "name": "ID-uri linii"
+        },
+        "direction_id": {
+          "name": "Sens"
+        },
+        "limit": {
+          "name": "Număr maxim de sosiri"
+        },
+        "horizon_minutes": {
+          "name": "Minute în avans"
+        }
+      }
+    }
+  }
+}

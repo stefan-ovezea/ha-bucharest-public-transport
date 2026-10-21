@@ -1,0 +1,35 @@
+[project]
+name = "ha-bucharest-public-transport"
+version = "0.1.0"
+description = "Keyless TPBI public transport for Home Assistant"
+requires-python = ">=3.14"
+license = "MIT"
+dependencies = ["gtfs-realtime-bindings==3.0.0"]
+
+[project.optional-dependencies]
+dev = ["homeassistant==2026.10.2", "pytest>=8", "pytest-asyncio>=1", "ruff>=0.14"]
+
+[tool.setuptools.packages.find]
+include = ["custom_components*"]
+
+[tool.setuptools.package-data]
+"custom_components.bucharest_transport" = ["*.json", "*.yaml", "translations/*.json", "www/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+pythonpath = ["."]
+
+[tool.ruff]
+target-version = "py314"
+line-length = 100
+extend-exclude = [".cache", ".venv", "dist"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC"]
+ignore = ["E501"]
+
+[build-system]
+requires = ["setuptools>=78"]
+build-backend = "setuptools.build_meta"
+

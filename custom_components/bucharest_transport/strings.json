@@ -1,0 +1,108 @@
+{
+  "title": "Bucharest Public Transport",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Bucharest Public Transport",
+        "description": "Download public TPBI data without an account or API key. The initial import may take a minute. After setup, add station boards and select tracked lines in the integration options. Metrorex provides timetable times and alerts where published."
+      }
+    },
+    "abort": {
+      "already_configured": "The integration is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Tracked lines",
+        "description": "GPS entities are created only for selected lines. Station boards are configured separately.",
+        "data": {
+          "tracked_route_ids": "Tracked lines",
+          "tracked_direction": "Tracked direction"
+        }
+      }
+    }
+  },
+  "config_subentries": {
+    "board": {
+      "entry_type": "Station board",
+      "initiate_flow": {
+        "user": "Add station board",
+        "reconfigure": "Reconfigure station"
+      },
+      "step": {
+        "user": {
+          "title": "Find a station",
+          "description": "Partial names, missing diacritics, and small spelling mistakes are supported.",
+          "data": {
+            "query": "Station name"
+          }
+        },
+        "stop": {
+          "title": "Choose the station or platform",
+          "data": {
+            "stop_id": "Station / platform"
+          }
+        },
+        "filters": {
+          "title": "Configure the board",
+          "data": {
+            "name": "Name",
+            "route_ids": "Lines (optional)",
+            "direction": "Direction"
+          }
+        }
+      },
+      "error": {
+        "no_stops": "No matching stations. Try another name."
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "next_arrival": {
+        "name": "Next arrival"
+      },
+      "timetable_health": {
+        "name": "Timetable health"
+      },
+      "positions_health": {
+        "name": "Vehicle positions health"
+      },
+      "predictions_health": {
+        "name": "Arrival predictions health"
+      },
+      "alerts_health": {
+        "name": "Alerts feed health"
+      }
+    },
+    "binary_sensor": {
+      "service_alerts": {
+        "name": "Service alerts"
+      }
+    }
+  },
+  "services": {
+    "get_arrivals": {
+      "name": "Get arrivals",
+      "description": "Return published timetable times and fresh predictions for a station.",
+      "fields": {
+        "stop_id": {
+          "name": "Stop ID"
+        },
+        "route_ids": {
+          "name": "Line IDs"
+        },
+        "direction_id": {
+          "name": "Direction"
+        },
+        "limit": {
+          "name": "Maximum arrivals"
+        },
+        "horizon_minutes": {
+          "name": "Minutes ahead"
+        }
+      }
+    }
+  }
+}

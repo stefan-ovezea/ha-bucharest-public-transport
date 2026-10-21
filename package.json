@@ -1,0 +1,21 @@
+{
+  "name": "bucharest-transport-card",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node frontend/build.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "playwright test"
+  },
+  "dependencies": {
+    "leaflet": "^1.9.4",
+    "lit": "^3.3.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.56.0",
+    "@types/leaflet": "^1.9.20",
+    "esbuild": "^0.25.10",
+    "typescript": "^5.9.3"
+  }
+}
