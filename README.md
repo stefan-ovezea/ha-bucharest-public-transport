@@ -177,6 +177,19 @@ npm test
 
 The compiled card is committed under the integration so HACS users need no build tools. Rebuild it after changing `frontend/`. Browser tests use offline fixtures and mock map tiles; ordinary tests do not contact TPBI.
 
+### Publishing versions
+
+HACS uses published GitHub release tags for versions; a manifest change or Git tag alone is insufficient. The default branch is hidden in HACS so normal installs use named releases.
+
+For each stable release:
+
+1. Set the same semantic version (for example `0.2.1`) in `custom_components/bucharest_transport/manifest.json`, `package.json`, both root version fields in `package-lock.json`, and `pyproject.toml`. Update the README card resource suffix and the User-Agent version in the coordinator and live smoke script.
+2. Rebuild the card, run the checks above, then commit and push the release changes to `main`.
+3. Create and push a matching tag, for example `git tag v0.2.1` then `git push origin v0.2.1`.
+4. Wait for the **Release** workflow to validate the versions, build the card, attach the installation ZIP, and publish the GitHub release. If it fails, fix the reported issue before publishing a release.
+
+In HACS, open this integration and select **Update information**, then install the named release and restart Home Assistant. An installation made from a branch may keep its commit ID as the installed version until a release is installed.
+
 Run `.venv/bin/python scripts/live_smoke.py` for an explicit live-feed import and arrival check. It downloads the full feed and uses `.cache/live.sqlite`; keep it out of routine automated test runs.
 
 CI runs Python tests, frontend type checks and browser tests, reproducible bundle checks, hassfest, and HACS validation. Installing through a custom HACS repository does not imply inclusion in HACS's default catalogue.

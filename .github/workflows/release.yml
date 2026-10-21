@@ -1,0 +1,42 @@
+name: Release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci && npm run typecheck && npm run build
+      - name: Verify release versions
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          python - <<'PY'
+          import json, os, re, tomllib
+          version = json.load(open('custom_components/bucharest_transport/manifest.json'))['version']
+          assert re.fullmatch(r'\d+\.\d+\.\d+', version), 'Use a stable semantic version'
+          assert os.environ['RELEASE_TAG'] == 'v' + version
+          assert json.load(open('package.json'))['version'] == version
+          lock = json.load(open('package-lock.json'))
+          assert lock['version'] == lock['packages']['']['version'] == version
+          with open('pyproject.toml', 'rb') as source:
+              assert tomllib.load(source)['project']['version'] == version
+          PY
+      - name: Package integration
+        run: python scripts/package.py
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/bucharest_transport.zip
+          fail_on_unmatched_files: true
+          generate_release_notes: true
+          make_latest: true
